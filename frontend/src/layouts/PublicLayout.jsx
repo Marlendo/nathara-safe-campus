@@ -20,7 +20,7 @@ export default function PublicLayout() {
           <Link to="/" className="text-xl font-bold tracking-tight">
             SAFE<span className="text-safety">Path</span>
           </Link>
-          <nav className="flex gap-4 text-sm">
+          <nav className="flex items-center gap-4 text-sm">
             <Link to="/report" className="hover:text-safety">
               Report
             </Link>
@@ -29,6 +29,13 @@ export default function PublicLayout() {
             </Link>
             <Link to="/case-status" className="hover:text-safety">
               Case Status
+            </Link>
+            <span className="h-4 w-px bg-white/20" aria-hidden="true" />
+            <Link
+              to="/dashboard/login"
+              className="rounded-lg border border-safety/60 px-3 py-1.5 font-semibold text-safety hover:bg-safety hover:text-white"
+            >
+              Sign in
             </Link>
           </nav>
         </div>
