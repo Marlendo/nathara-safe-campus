@@ -10,7 +10,6 @@ const publicLimiter = rateLimit({
   max: Number(process.env.RATE_MAX) || 60,
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: process.env.TRUST_PROXY === "true",
   message: { error: "Too many requests — please try again later" },
 });
 
@@ -20,7 +19,6 @@ const loginLimiter = rateLimit({
   max: Number(process.env.RATE_MAX) || 20,
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: process.env.TRUST_PROXY === "true",
   message: { error: "Too many login attempts — please wait and try again" },
 });
 
