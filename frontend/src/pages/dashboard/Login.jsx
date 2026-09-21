@@ -64,6 +64,13 @@ export default function Login() {
         <p className="mt-4 rounded-lg bg-canvas px-3 py-2 text-xs text-ink/60">
           Demo account pre-filled. Password: <code>demo1234</code>
         </p>
+
+        <Link
+          to="/"
+          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-navy/15 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-canvas"
+        >
+          <span aria-hidden="true">←</span> Back to SafePath system
+        </Link>
       </Card>
     </div>
   );
