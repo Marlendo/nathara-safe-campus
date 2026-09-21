@@ -1,0 +1,13 @@
+# Normalize line endings — files are stored with LF in the repo.
+* text=auto
+
+# Shell scripts must stay LF so they run correctly inside Linux containers.
+*.sh text eol=lf
+
+# Docker / compose / config files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf
+nginx.conf text eol=lf
+docker-compose.yml text eol=lf
