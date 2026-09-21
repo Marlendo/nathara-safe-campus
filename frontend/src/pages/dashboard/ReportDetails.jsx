@@ -40,9 +40,9 @@ export default function ReportDetails() {
       .catch((err) => (err.status === 404 ? setNotFound(true) : setError(err.message)));
     api.getServices().then((d) => setServices(d.services)).catch(() => {});
     api
-      .getUsers(token)
+      .getActiveResponders(token)
       .then((d) => {
-        setUsers(d.users.filter((u) => u.role === "RESPONDER"));
+        setUsers(d.users);
         const assigned = d.users.find(
           (u) => u.id === data?.report?.assigned_user_id
         );

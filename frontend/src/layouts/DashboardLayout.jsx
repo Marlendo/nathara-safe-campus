@@ -6,11 +6,18 @@ const navItems = [
   { to: "/dashboard/cases", label: "Cases", end: false },
 ];
 
+const adminNavItems = [
+  { to: "/dashboard/admin/users", label: "User accounts", end: false },
+  { to: "/dashboard/admin/services", label: "Services", end: false },
+  { to: "/dashboard/admin/activity", label: "Activity log", end: false },
+];
+
 /**
  * Responder dashboard shell with a compact sidebar.
  */
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -38,6 +45,28 @@ export default function DashboardLayout() {
                 {item.label}
               </NavLink>
             ))}
+
+            {isAdmin && (
+              <>
+                <p className="mt-4 px-3 text-[11px] font-bold uppercase tracking-wider text-white/40">
+                  Administration
+                </p>
+                {adminNavItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive ? "bg-white/15 text-safety" : "text-white/70 hover:bg-white/10"
+                      }`
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </>
+            )}
           </nav>
 
           <div className="mt-auto space-y-3">

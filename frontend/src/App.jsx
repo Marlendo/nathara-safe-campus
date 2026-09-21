@@ -21,6 +21,11 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import Reports from "./pages/dashboard/Reports";
 import ReportDetails from "./pages/dashboard/ReportDetails";
 
+import AdminRoute from "./components/AdminRoute";
+import AdminUsers from "./pages/admin/Users";
+import AdminServices from "./pages/admin/Services";
+import AdminActivity from "./pages/admin/Activity";
+
 export default function App() {
   return (
     <Routes>
@@ -51,6 +56,32 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard/cases" element={<Reports />} />
         <Route path="dashboard/cases/:id" element={<ReportDetails />} />
+
+        {/* Admin panel (admin role only) */}
+        <Route
+          path="dashboard/admin/users"
+          element={
+            <AdminRoute>
+              <AdminUsers />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="dashboard/admin/services"
+          element={
+            <AdminRoute>
+              <AdminServices />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="dashboard/admin/activity"
+          element={
+            <AdminRoute>
+              <AdminActivity />
+            </AdminRoute>
+          }
+        />
       </Route>
 
       <Route path="*" element={<PublicLayout />} />
