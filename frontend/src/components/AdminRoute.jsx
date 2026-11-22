@@ -2,17 +2,17 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
 
 /**
- * Guards admin-only routes. Responders (non-admins) are sent back to the
- * dashboard overview.
+ * Guards admin-only routes. Guard kanonis: role === 'admin' &&
+ * scope === 'SAFE_CAMPUS' (exact). Selain itu kembali ke dashboard.
  */
 export default function AdminRoute({ children }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/dashboard/login" replace state={{ from: location }} />;
   }
-  if (user?.role !== "ADMIN") {
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
   return children;

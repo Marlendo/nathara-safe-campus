@@ -17,6 +17,7 @@ import SupportServices from "./pages/public/SupportServices";
 import CaseStatus from "./pages/public/CaseStatus";
 
 import Login from "./pages/dashboard/Login";
+import Callback from "./pages/auth/Callback";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Reports from "./pages/dashboard/Reports";
 import ReportDetails from "./pages/dashboard/ReportDetails";
@@ -46,6 +47,8 @@ export default function App() {
 
       {/* Dashboard (responders) */}
       <Route path="dashboard/login" element={<Login />} />
+      {/* SSO callback (tujuan redirect portal SSO) */}
+      <Route path="auth/callback" element={<Callback />} />
       <Route
         element={
           <ProtectedRoute>

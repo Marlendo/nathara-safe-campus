@@ -1,13 +1,27 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
 
 const { query } = require("../db");
-const { requireAuth, requireAdmin } = require("../middleware/auth");
+const { requireAuth, requireAdminSc } = require("../middleware/ssoAuth");
 const { SERVICE_TYPES, STATUSES } = require("../utils/constants");
 
 const router = express.Router();
 
-router.use(requireAuth); // everything below requires a responder/admin JWT
+/** Petakan nilai legacy (ADMIN/RESPONDER) ke peran kanonis (admin/responder). */
+function canonicalRole(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "admin") return "admin";
+  if (v === "responder") return "responder";
+  return null;
+}
+
+/** Scope kanonis: exact match SAFE_CAMPUS atau NONE. */
+function canonicalScope(value) {
+  const v = String(value || "").trim();
+  if (v === "SAFE_CAMPUS" || v === "NONE") return v;
+  return null;
+}
+
+router.use(requireAuth); // everything below requires a valid SSO JWT
 
 /* ------------------------------------------------------------------ */
 /*  Case management (responders & admins)                              */
@@ -183,7 +197,7 @@ router.post("/reports/:caseNumber/assign", async (req, res, next) => {
     }
 
     const { rows: userRows } = await query(
-      "SELECT id, name FROM users WHERE id = $1 AND role = 'RESPONDER'",
+      "SELECT id, name FROM users WHERE id = $1 AND role = 'responder'",
       [userId]
     );
     if (userRows.length === 0) {
@@ -343,16 +357,18 @@ router.post("/reports/:caseNumber/referrals", async (req, res, next) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Users / responder account management (ADMIN only)                  */
+/*  Users / responder account management (admin + SAFE_CAMPUS only)    */
+/*  Akun dibuat TANPA password — akses via SSO; peran/scope dipetakan  */
+/*  dari klaim prod ke profil lokal. Tidak ada reset-password.         */
 /* ------------------------------------------------------------------ */
 
 // GET /admin/responders — active responders for assignment dropdowns
-// (available to any authenticated responder/admin)
+// (available to any authenticated user)
 router.get("/responders", async (_req, res, next) => {
   try {
     const { rows } = await query(`
       SELECT id, name FROM users
-       WHERE role = 'RESPONDER' AND status = 'ACTIVE'
+       WHERE role = 'responder' AND status = 'ACTIVE'
        ORDER BY name
     `);
     res.json({ users: rows });
@@ -362,10 +378,10 @@ router.get("/responders", async (_req, res, next) => {
 });
 
 // GET /admin/users
-router.get("/users", requireAdmin, async (_req, res, next) => {
+router.get("/users", requireAdminSc, async (_req, res, next) => {
   try {
     const { rows } = await query(`
-      SELECT u.id, u.name, u.email, u.role, u.status, u.created_at,
+      SELECT u.id, u.name, u.email, u.role, u.scope, u.status, u.created_at,
              (SELECT count(*) FROM case_assignments ca WHERE ca.user_id = u.id)::int AS cases_assigned
         FROM users u
        ORDER BY u.name
@@ -376,10 +392,10 @@ router.get("/users", requireAdmin, async (_req, res, next) => {
   }
 });
 
-// POST /admin/users  — create a responder or admin account
-router.post("/users", requireAdmin, async (req, res, next) => {
+// POST /admin/users — create a responder or admin account (no password, SSO only)
+router.post("/users", requireAdminSc, async (req, res, next) => {
   try {
-    const { name, email, password, role = "RESPONDER" } = req.body || {};
+    const { name, email, role = "responder", scope = "NONE" } = req.body || {};
 
     if (!name || String(name).trim().length < 2) {
       return res.status(400).json({ error: "name is required (min 2 characters)" });
@@ -387,22 +403,20 @@ router.post("/users", requireAdmin, async (req, res, next) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "a valid email is required" });
     }
-    if (!password || String(password).length < 8) {
-      return res
-        .status(400)
-        .json({ error: "password must be at least 8 characters" });
+    const canonRole = canonicalRole(role);
+    if (!canonRole) {
+      return res.status(400).json({ error: "role must be responder or admin" });
     }
-    if (!["RESPONDER", "ADMIN"].includes(role)) {
-      return res.status(400).json({ error: "role must be RESPONDER or ADMIN" });
+    const canonScope = canonicalScope(scope);
+    if (!canonScope) {
+      return res.status(400).json({ error: "scope must be NONE or SAFE_CAMPUS" });
     }
-
-    const passwordHash = await bcrypt.hash(String(password), 10);
 
     const { rows } = await query(
-      `INSERT INTO users (name, email, password_hash, role)
+      `INSERT INTO users (name, email, role, scope)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, role, status`,
-      [String(name).trim(), email.toLowerCase().trim(), passwordHash, role]
+       RETURNING id, name, email, role, scope, status`,
+      [String(name).trim(), email.toLowerCase().trim(), canonRole, canonScope]
     ).catch((err) => {
       if (err.code === "23505") {
         const e = new Error("An account with that email already exists");
@@ -418,11 +432,11 @@ router.post("/users", requireAdmin, async (req, res, next) => {
   }
 });
 
-// PATCH /admin/users/:id — update name, role, or status (disable/enable)
-router.patch("/users/:id", requireAdmin, async (req, res, next) => {
+// PATCH /admin/users/:id — update name, role, scope, or status (disable/enable)
+router.patch("/users/:id", requireAdminSc, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, role, status } = req.body || {};
+    const { name, role, scope, status } = req.body || {};
 
     const { rows: existing } = await query(
       "SELECT id, role FROM users WHERE id = $1",
@@ -439,8 +453,19 @@ router.patch("/users/:id", requireAdmin, async (req, res, next) => {
       });
     }
 
-    if (role && !["RESPONDER", "ADMIN"].includes(role)) {
-      return res.status(400).json({ error: "role must be RESPONDER or ADMIN" });
+    let canonRole = null;
+    if (role) {
+      canonRole = canonicalRole(role);
+      if (!canonRole) {
+        return res.status(400).json({ error: "role must be responder or admin" });
+      }
+    }
+    let canonScope = null;
+    if (scope) {
+      canonScope = canonicalScope(scope);
+      if (!canonScope) {
+        return res.status(400).json({ error: "scope must be NONE or SAFE_CAMPUS" });
+      }
     }
     if (status && !["ACTIVE", "DISABLED"].includes(status)) {
       return res.status(400).json({ error: "status must be ACTIVE or DISABLED" });
@@ -450,13 +475,15 @@ router.patch("/users/:id", requireAdmin, async (req, res, next) => {
       `UPDATE users
           SET name = COALESCE($1, name),
               role = COALESCE($2, role),
-              status = COALESCE($3, status),
+              scope = COALESCE($3, scope),
+              status = COALESCE($4, status),
               updated_at = now()
-        WHERE id = $4
-        RETURNING id, name, email, role, status`,
+        WHERE id = $5
+        RETURNING id, name, email, role, scope, status`,
       [
         name ? String(name).trim() : null,
-        role || null,
+        canonRole,
+        canonScope,
         status || null,
         id,
       ]
@@ -468,39 +495,12 @@ router.patch("/users/:id", requireAdmin, async (req, res, next) => {
   }
 });
 
-// POST /admin/users/:id/reset-password
-router.post("/users/:id/reset-password", requireAdmin, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { password } = req.body || {};
-
-    if (!password || String(password).length < 8) {
-      return res
-        .status(400)
-        .json({ error: "password must be at least 8 characters" });
-    }
-
-    const { rowCount } = await query(
-      "UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2",
-      [await bcrypt.hash(String(password), 10), id]
-    );
-
-    if (rowCount === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /* ------------------------------------------------------------------ */
-/*  Service directory management (ADMIN only)                          */
+/*  Service directory management (admin + SAFE_CAMPUS only)            */
 /* ------------------------------------------------------------------ */
 
 // GET /admin/services
-router.get("/services", requireAdmin, async (_req, res, next) => {
+router.get("/services", requireAdminSc, async (_req, res, next) => {
   try {
     const { rows } = await query(`
       SELECT id, name, service_type, description, phone, email, availability, status, created_at
@@ -514,7 +514,7 @@ router.get("/services", requireAdmin, async (_req, res, next) => {
 });
 
 // POST /admin/services
-router.post("/services", requireAdmin, async (req, res, next) => {
+router.post("/services", requireAdminSc, async (req, res, next) => {
   try {
     const { name, serviceType, description, phone, email, availability } =
       req.body || {};
@@ -549,7 +549,7 @@ router.post("/services", requireAdmin, async (req, res, next) => {
 });
 
 // PATCH /admin/services/:id
-router.patch("/services/:id", requireAdmin, async (req, res, next) => {
+router.patch("/services/:id", requireAdminSc, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, serviceType, description, phone, email, availability, status } =
@@ -598,7 +598,7 @@ router.patch("/services/:id", requireAdmin, async (req, res, next) => {
 });
 
 // DELETE /admin/services/:id — soft delete via INACTIVE status
-router.delete("/services/:id", requireAdmin, async (req, res, next) => {
+router.delete("/services/:id", requireAdminSc, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { rows } = await query(
@@ -615,11 +615,11 @@ router.delete("/services/:id", requireAdmin, async (req, res, next) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  System activity (ADMIN only)                                       */
+/*  System activity (admin + SAFE_CAMPUS only)                           */
 /* ------------------------------------------------------------------ */
 
 // GET /admin/activity?limit=&type=
-router.get("/activity", requireAdmin, async (req, res, next) => {
+router.get("/activity", requireAdminSc, async (req, res, next) => {
   try {
     const { type } = req.query;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);

@@ -1,11 +1,11 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
+import { describe, test, expect } from "bun:test";
 
 /**
- * SafePath API smoke tests.
+ * Nathara Safe Campus API smoke tests (SSO).
  *
- * Requires the API to be running (npm run dev in backend/) and a seeded
- * database (npm run db:reset). Run: npm test
+ * Requires the API to be running (bun run dev in backend/) and a seeded
+ * database (bun run db:reset). No password login exists anymore.
+ * Run: bun test
  */
 
 const BASE = process.env.TEST_API_BASE || "http://localhost:5001/api/v1";
@@ -30,15 +30,16 @@ async function req(path, { method = "GET", body, token } = {}) {
 
 test("health endpoint responds", async () => {
   const { status, json } = await req("/health");
-  assert.equal(status, 200);
-  assert.equal(json.status, "ok");
+  expect(status).toBe(200);
+  expect(json.status).toBe("ok");
+  expect(json.service).toBe("nathara-safe-campus-api");
 });
 
 test("services are listed publicly", async () => {
   const { status, json } = await req("/services");
-  assert.equal(status, 200);
-  assert.ok(Array.isArray(json.services));
-  assert.ok(json.services.length >= 1);
+  expect(status).toBe(200);
+  expect(Array.isArray(json.services)).toBe(true);
+  expect(json.services.length >= 1).toBe(true);
 });
 
 test("anonymous report can be created and looked up by case number", async () => {
@@ -54,13 +55,13 @@ test("anonymous report can be created and looked up by case number", async () =>
       reporterType: "anonymous",
     },
   });
-  assert.equal(status, 201);
-  assert.ok(json.caseNumber.startsWith("SP-"));
+  expect(status).toBe(201);
+  expect(json.caseNumber.startsWith("NSC-")).toBe(true);
 
   const lookup = await req(`/reports/${json.caseNumber}/status`);
-  assert.equal(lookup.status, 200);
-  assert.equal(lookup.json.status, "NEW");
-  assert.ok(Array.isArray(lookup.json.timeline));
+  expect(lookup.status).toBe(200);
+  expect(lookup.json.status).toBe("NEW");
+  expect(Array.isArray(lookup.json.timeline)).toBe(true);
 });
 
 test("report validation rejects short descriptions", async () => {
@@ -73,48 +74,36 @@ test("report validation rejects short descriptions", async () => {
       reporterType: "anonymous",
     },
   });
-  assert.equal(status, 400);
+  expect(status).toBe(400);
 });
 
-test("responder login works and admin endpoints reject responders", async () => {
-  const login = await req("/auth/login", {
-    method: "POST",
-    body: { email: "responder@safepath.demo", password: "demo1234" },
-  });
-  assert.equal(login.status, 200);
-  assert.ok(login.json.token);
-  const token = login.json.token;
-
-  // Responder can hit the overview
-  const overview = await req("/admin/overview", { token });
-  assert.equal(overview.status, 200);
-
-  // But is denied from admin-only user management
-  const users = await req("/admin/users", { token });
-  assert.equal(users.status, 403);
-});
-
-test("admin login can list users and read activity log", async () => {
-  const login = await req("/auth/login", {
-    method: "POST",
-    body: { email: "admin@safepath.demo", password: "demo1234" },
-  });
-  assert.equal(login.status, 200);
-  const token = login.json.token;
-
-  const users = await req("/admin/users", { token });
-  assert.equal(users.status, 200);
-  assert.ok(Array.isArray(users.json.users));
-
-  const activity = await req("/admin/activity?limit=5", { token });
-  assert.equal(activity.status, 200);
-  assert.ok(Array.isArray(activity.json.events));
-});
-
-test("invalid login is rejected", async () => {
+test("local password login is gone (404)", async () => {
   const { status } = await req("/auth/login", {
     method: "POST",
-    body: { email: "responder@safepath.demo", password: "wrong-password" },
+    body: { email: "someone@ppkpt.nathara.ac.id", password: "whatever123" },
   });
-  assert.equal(status, 401);
+  expect(status).toBe(404);
+});
+
+test("me without token is rejected (401)", async () => {
+  const { status } = await req("/auth/me");
+  expect(status).toBe(401);
+});
+
+test("me with a forged token is rejected (401)", async () => {
+  const { status } = await req("/auth/me", { token: "forged.token.here" });
+  expect(status).toBe(401);
+});
+
+test("admin endpoints require SSO auth (401 without token)", async () => {
+  const { status } = await req("/admin/users");
+  expect(status).toBe(401);
+});
+
+test("backchannel-logout without logout_token is rejected (400)", async () => {
+  const { status } = await req("/auth/backchannel-logout", {
+    method: "POST",
+    body: {},
+  });
+  expect(status).toBe(400);
 });

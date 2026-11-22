@@ -1,50 +1,48 @@
-# SafePath — Test Plan
+# Nathara Safe Campus — Test Plan
 
 Both servers must be running before any manual testing:
 
-```powershell
+```bash
 # Terminal 1 — API on http://localhost:5001
 cd backend
-npm run dev
+bun run dev
 
 # Terminal 2 — Web on http://localhost:5173
-cd frontend
-npm run dev
+bun run --cwd ../frontend dev
 ```
 
-Reset demo data whenever you want a clean slate:
+Reset data whenever you want a clean slate:
 
-```powershell
+```bash
 cd backend
-npm run db:reset
+bun run db:reset
 ```
 
 - Public app: http://localhost:5173
-- Responder/admin dashboard: http://localhost:5173/dashboard/login
+- Responder/admin dashboard: http://localhost:5173/dashboard/login (SSO)
 
-Demo accounts (seeded, fictional data only):
-
-| Role | Email | Password |
-|---|---|---|
-| Responder | responder@safepath.demo | demo1234 |
-| Admin | admin@safepath.demo | demo1234 |
+Sign-in (seeded admin via SSO only — no passwords exist):
+- Admin SSO account comes from `SEED_ADMIN_SUB` / `SEED_ADMIN_EMAIL`
+  (values via VPS file, never committed). The admin scope `SAFE_CAMPUS`
+  is granted by PM Production.
 
 ---
 
 ## 1. Automated backend tests
 
-```powershell
+```bash
 cd backend
-npm run db:reset
-npm test
+bun run db:reset
+bun test
 ```
 
-Expect: `tests 7 · pass 7 · fail 0`.
+Expect: all tests pass.
 
 Covers: health, public services list, anonymous report creation + case-status
-lookup, input validation (short description rejected), responder login + RBAC
-(responder blocked from admin-only routes), admin login + activity log, invalid
-login rejected.
+lookup (NSC- prefix), input validation (short description rejected),
+disabled local login (POST /auth/login → 404), SSO `me` without token (401),
+forged token (401), admin routes without token (401), backchannel-logout
+validation (400 without logout_token).
 
 ---
 
@@ -52,13 +50,13 @@ login rejected.
 
 | # | URL | What to check |
 |---|---|---|
-| 1 | `/` | Landing page; three actions: report, find support, protection; DEMO banner |
+| 1 | `/` | Landing page; three actions: report, find support, protection; staging banner |
 | 2 | `/about` | Neutral "Tourism Foundation" page (Quick Exit target) |
 | 3 | `/report` | Wizard step 1: choose a report type |
 | 4 | `/report/safety` | Urgency assessment questions → recommended level |
 | 5 | `/report/details` | Incident details; **short description is rejected with an error** |
 | 6 | `/report/contact` | Choose **anonymous** or provide contact (phone/sms) |
-| 7 | `/report/review` | Review everything → Submit → **Case ID** (e.g. `SP-1008`) |
+| 7 | `/report/review` | Review everything → Submit → **Case ID** (e.g. `NSC-1008`) |
 | 8 | `/case-status` | Enter the Case ID → status + timeline shown |
 | 9 | `/support` | Service directory; filter by type (emergency/protection/psychosocial…) |
 | 10 | `/protection` | Protection pathway steps |
@@ -66,15 +64,27 @@ login rejected.
 
 ---
 
-## 3. Responder dashboard
+## 3. SSO sign-in
 
-Login: `responder@safepath.demo` / `demo1234`
+1. Open `/dashboard/login` → page shows **"Masuk dengan SSO"** (no email/password fields,
+   no demo credentials anywhere).
+2. Click → redirected to the SSO portal (`VITE_SSO_PORTAL_URL/login`).
+3. Sign in with an SSO account that has `role=admin` + `scopes[] ∋ SAFE_CAMPUS`
+   → redirected to `/auth/callback` → lands on `/dashboard` with profile loaded.
+4. Sign in with an SSO account WITHOUT the scope → `GET /api/v1/auth/me`
+   succeeds (authenticated) but `/dashboard/admin/*` shows 403
+   **"Forbidden — butuh admin Safe Campus. Hubungi admin."**
+5. Invalid/expired token → 401 + prompt to sign in again (no internal reason leaked).
+
+---
+
+## 4. Responder dashboard (SSO session)
 
 | # | Page | What to check |
 |---|---|---|
 | 1 | `/dashboard` | Stats (total, statuses, urgency), recent cases list |
 | 2 | `/dashboard/cases` | Full case list; filters for status / urgency / type work |
-| 3 | `/dashboard/cases/:id` (open SP-1003) | Timeline, contacts, notes, referrals |
+| 3 | `/dashboard/cases/:id` (open NSC-1003) | Timeline, contacts, notes, referrals |
 | 4 | Same case detail — **Assign** | Pick a responder (dropdown from `/admin/responders`) → case shows assigned |
 | 5 | — **Change status** | e.g. → `UNDER_REVIEW` → event added to timeline |
 | 6 | — **Add note** | Internal note appears in the notes list |
@@ -83,36 +93,30 @@ Login: `responder@safepath.demo` / `demo1234`
 
 ---
 
-## 4. Admin panel (admin only)
+## 5. Admin panel (admin + SAFE_CAMPUS only)
 
-Login: `admin@safepath.demo` / `demo1234`
+After SSO login as admin, the sidebar shows the **Administration** section
+(User accounts · Services · Activity log). Non-admins never see this section.
 
-After login, the sidebar shows the **Administration** section
-(User accounts · Services · Activity log). Responders never see this section.
+### 5.1 User accounts — `/dashboard/admin/users`
 
-### 4.1 User accounts — `/dashboard/admin/users`
-
-**Create an account**
-1. Fill: Full name (`Omar Bakri`), Email (`omar@safepath.demo`), Temporary
-   password (≥ 8 chars, e.g. `temp1234`), Role (`Responder`).
+**Create an account** (no password — SSO only)
+1. Fill: Full name (`Omar Bakri`), Email (`omar@ppkpt.nathara.ac.id`),
+   Role (`Responder`), Scope (`NONE`).
 2. Click **Create account** → the account appears in the list (Active badge).
 3. Repeat with the same email → expect error **"An account with that email
    already exists"**.
-4. Repeat with an 4-char password → expect a clear validation error.
+4. Promote: edit role → `admin`, scope → `SAFE_CAMPUS` → admin routes open.
 
 **Disable / enable**
-- On the new account click **Disable** → badge changes to Disabled and the
-  user can no longer log in. Click **Enable** to restore.
-
-**Reset password**
-- Click **Reset password** → enter a new password (≥ 8 chars) → "Password
-  updated" alert.
+- On a non-own account click **Disable** → badge changes to Disabled and the
+  user is blocked (403/401). Click **Enable** to restore.
 
 **Self lock-out guard (security check)**
-- On your *own* account (the one marked **(you)**), click **Disable** →
-  expect error **"You cannot modify your own account"**.
+- On your *own* account (the one marked **(you)**), the Disable button is absent /
+  API returns **"You cannot modify your own account"**.
 
-### 4.2 Service directory — `/dashboard/admin/services`
+### 5.2 Service directory — `/dashboard/admin/services`
 
 **Add**
 1. Fill: Name (`Test Helpline`), Type (`psychosocial`), Description, Phone, Email, Availability.
@@ -124,9 +128,9 @@ After login, the sidebar shows the **Administration** section
 
 **Deactivate**
 - Click **Deactivate** → confirm dialog → badge changes to Inactive.
-- Verify the deactivated service no longer appears in the **public** `/support` page.
+- Verify the deactivated service no longer appears on the **public** `/support` page.
 
-### 4.3 Activity log — `/dashboard/admin/activity`
+### 5.3 Activity log — `/dashboard/admin/activity`
 
 - Default: all events, newest first (description, case number, actor, role, time).
 - Click the filter pills (All events / REPORT_CREATED / CASE_ASSIGNED /
@@ -134,33 +138,32 @@ After login, the sidebar shows the **Administration** section
 - Perform an action (e.g. change a case status) in the responder dashboard,
   come back, and the new event appears at the top.
 
-### 4.4 Role separation (security check)
+### 5.4 Role separation (security check)
 
 1. As admin, visit `/dashboard/admin/users` → loads fine.
-2. Log out → log in as **responder** → the Administration section is **absent**
+2. Log out → log in as a **non-admin SSO user** → the Administration section is **absent**
    from the sidebar.
-3. While logged in as responder, manually open `/dashboard/admin/users` →
+3. While logged in as non-admin, manually open `/dashboard/admin/users` →
    expect redirect to `/dashboard` (not the page).
-4. Try the API directly: `GET /api/v1/admin/users` with the responder token →
+4. Try the API directly: `GET /api/v1/admin/users` with the non-admin token →
    expect **403**.
 
 ---
 
-## 5. Production build check
+## 6. Production build check
 
-```powershell
-cd frontend
-npm run build   # must compile without errors
+```bash
+bun run --cwd frontend build   # must compile without errors
 ```
 
 ---
 
-## 6. Docker deployment (optional, needs Docker installed)
+## 7. Docker deployment (optional, needs Docker installed)
 
-```powershell
-xcopy /E /I .env.example .env   # then edit JWT_SECRET / POSTGRES_PASSWORD
+```bash
+cp .env.example .env   # then edit POSTGRES_PASSWORD / SEED_ADMIN_*
 docker compose up --build -d
 # open http://localhost:8080
 ```
 
-The `init` service applies the schema and seeds demo data once (idempotent).
+The `init` service applies the schema + migrations and seeds data once (idempotent).

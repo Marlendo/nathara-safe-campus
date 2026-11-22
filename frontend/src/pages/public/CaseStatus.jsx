@@ -17,7 +17,7 @@ export default function CaseStatus() {
   const check = async (e) => {
     e?.preventDefault();
     if (!caseId.trim()) {
-      setError("Please enter your Case ID, e.g. SP-1042");
+      setError("Please enter your Case ID, e.g. NSC-1042");
       return;
     }
     setError("");
@@ -41,7 +41,7 @@ export default function CaseStatus() {
         <input
           type="text"
           className="w-full rounded-lg border border-navy/15 bg-white px-3 py-2.5 text-sm uppercase tracking-wide focus:border-safety focus:outline-none focus:ring-2 focus:ring-safety/30"
-          placeholder="SP-1042"
+          placeholder="NSC-1042"
           value={caseId}
           onChange={(e) => setCaseId(e.target.value)}
         />

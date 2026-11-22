@@ -33,9 +33,8 @@ export const api = {
   getServices: (type) =>
     request(`/services${type ? `?type=${type}` : ""}`),
 
-  // Auth
-  login: (email, password) =>
-    request("/auth/login", { method: "POST", body: { email, password } }),
+  // Auth (SSO — tidak ada login password)
+  getMe: (token) => request("/auth/me", { token }),
 
   // Responder
   getOverview: (token) => request("/admin/overview", { token }),
@@ -67,13 +66,12 @@ export const api = {
   deleteService: (token, id) =>
     request(`/admin/services/${id}`, { method: "DELETE", token }),
 
-  // Admin — responder accounts
+  // Admin — user accounts (tanpa password; peran/scope dipetakan dari SSO)
+  getUsers: (token) => request("/admin/users", { token }),
   createUser: (token, data) =>
     request("/admin/users", { method: "POST", body: data, token }),
   updateUser: (token, id, data) =>
     request(`/admin/users/${id}`, { method: "PATCH", body: data, token }),
-  resetPassword: (token, id, password) =>
-    request(`/admin/users/${id}/reset-password`, { method: "POST", body: { password }, token }),
 
   // Admin — system activity
   getActivity: (token, limit = 50) =>

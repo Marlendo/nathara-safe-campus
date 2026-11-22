@@ -1,6 +1,12 @@
 -- ============================================================
--- SafePath — POC schema
--- PostgreSQL 17
+-- Nathara Safe Campus — schema
+-- PostgreSQL 18
+--
+-- Catatan: instalasi baru menerapkan file ini + seluruh
+-- db/migrations/*.sql (idempoten). Hasil akhir instalasi baru
+-- SAMA dengan DB lama yang dimigrasi (migrasi 0002_sso_rebrand
+-- sudah terlipat di tabel users/audit di bawah).
+-- Perubahan skema selanjutnya HANYA via file migrasi baru.
 -- ============================================================
 
 -- Clean slate (dev only)
@@ -15,18 +21,39 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP SEQUENCE IF EXISTS case_seq;
 
 -- ============================================================
--- Users (responders & admins)
+-- Users (SSO-provisioned; login password lokal DIMATIKAN)
+-- role: admin | responder ; scope: NONE | SAFE_CAMPUS
+-- Guard kanonis: role='admin' AND scope='SAFE_CAMPUS' (exact).
 -- ============================================================
 CREATE TABLE users (
   id            SERIAL PRIMARY KEY,
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('ADMIN', 'RESPONDER')),
+  supabase_sub  TEXT UNIQUE,
+  role          TEXT NOT NULL CHECK (role IN ('admin', 'responder')),
+  scope         TEXT NOT NULL DEFAULT 'NONE' CHECK (scope IN ('NONE', 'SAFE_CAMPUS')),
   status        TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DISABLED')),
+  last_login    TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_users_supabase_sub ON users (supabase_sub);
+CREATE INDEX idx_users_email ON users (email);
+
+-- ============================================================
+-- SSO login audit (tanpa token — hanya sub/email/hasil/ip/waktu)
+-- ============================================================
+CREATE TABLE sso_login_audit (
+  id           SERIAL PRIMARY KEY,
+  supabase_sub TEXT,
+  email        TEXT,
+  hasil        TEXT NOT NULL,
+  ip           TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_sso_login_audit_sub ON sso_login_audit (supabase_sub);
 
 -- ============================================================
 -- Reports (all public submissions)

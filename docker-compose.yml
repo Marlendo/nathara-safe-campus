@@ -1,26 +1,28 @@
 # ============================================================
-# SafePath — production-style stack
+# Nathara Safe Campus — production-style stack
 #
-#   docker compose up --build
+#   bunx --bun compose up --build   (atau: docker compose up --build)
 #
 # Services:
-#   db    — PostgreSQL 17 (persistent volume)
-#   api   — Express API (rate-limited, helmet-hardened)
+#   db    — PostgreSQL 18 (persistent volume)
+#   api   — Express API (SSO Supabase prod, rate-limited, helmet-hardened)
 #   web   — nginx serving the built React SPA, proxying /api
 #
-# Set a strong JWT_SECRET in production (see README).
+# Auth = SSO Supabase prod (RS256 via JWKS). Tidak ada secret lokal
+# lagi — rahasia server-side hanya POSTGRES_PASSWORD +
+# DATABASE_URL via file VPS. service_role HARAM di sini.
 # ============================================================
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
-      POSTGRES_USER: safepath
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safepath}
-      POSTGRES_DB: safepath
+      POSTGRES_USER: safe_campus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safe_campus}
+      POSTGRES_DB: safe_campus
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - safe-campus-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U safepath -d safepath"]
+      test: ["CMD-SHELL", "pg_isready -U safe_campus -d safe_campus"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,7 +32,13 @@ services:
     build: ./backend
     command: ["sh", "/app/db/init-docker.sh"]
     environment:
-      DATABASE_URL: postgres://safepath:${POSTGRES_PASSWORD:-safepath}@db:5432/safepath
+      DATABASE_URL: postgres://safe_campus:${POSTGRES_PASSWORD:-safe_campus}@db:5432/safe_campus
+      SSO_JWKS_URL: ${SSO_JWKS_URL:-https://api.nathara.ac.id/functions/v1/sso-jwks}
+      SSO_ISSUER: ${SSO_ISSUER:-https://sso.nathara.ac.id}
+      SSO_AUDIENCE: ${SSO_AUDIENCE:-ppkpt}
+      SEED_ADMIN_SUB: ${SEED_ADMIN_SUB:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Safe Campus Admin}
     depends_on:
       db:
         condition: service_healthy
@@ -38,13 +46,14 @@ services:
 
   api:
     build: ./backend
-    command: ["node", "server.js"]
+    command: ["bun", "server.js"]
     environment:
       NODE_ENV: production
       PORT: 5001
-      DATABASE_URL: postgres://safepath:${POSTGRES_PASSWORD:-safepath}@db:5432/safepath
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (e.g. openssl rand -hex 32)}
-      JWT_EXPIRES: 8h
+      DATABASE_URL: postgres://safe_campus:${POSTGRES_PASSWORD:-safe_campus}@db:5432/safe_campus
+      SSO_JWKS_URL: ${SSO_JWKS_URL:-https://api.nathara.ac.id/functions/v1/sso-jwks}
+      SSO_ISSUER: ${SSO_ISSUER:-https://sso.nathara.ac.id}
+      SSO_AUDIENCE: ${SSO_AUDIENCE:-ppkpt}
       TRUST_PROXY: "true"
       RATE_WINDOW_MS: 600000
       RATE_MAX: 60
@@ -62,4 +71,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  db_data:
+  safe-campus-postgres-data:

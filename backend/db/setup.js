@@ -2,15 +2,22 @@ require("dotenv").config();
 const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
+const { runMigrations } = require("./migrate");
 
 /**
- * Creates the database (if needed) and applies schema.sql.
- * Run: npm run db:setup   (or node db/setup.js)
+ * Provisioning awal database: buat DB (bila belum ada), terapkan
+ * schema.sql, lalu jalankan migrasi aditif (db/migrations/*.sql).
+ * Run: bun db/setup.js   (atau: DATABASE_URL='...' bun db/setup.js)
  *
- * Assumes a running PostgreSQL server whose connection details are in
- * DATABASE_URL (see .env.example) — e.g. postgres://postgres:postgres@localhost:5432/safepath
+ * Perubahan skema SETELAH provisioning awal HANYA via file migrasi
+ * baru — JANGAN edit schema.sql yang sudah applied tanpa migrasi.
+ * (Lihat db/migrations/0002_sso_rebrand.sql.)
  */
 async function main() {
+  if (!process.env.DATABASE_URL) {
+    console.error("Missing required environment variable: DATABASE_URL");
+    process.exit(1);
+  }
   const dbUrl = new URL(process.env.DATABASE_URL);
   const dbName = dbUrl.pathname.slice(1);
 
@@ -41,10 +48,17 @@ async function main() {
 
   // 2. Apply the schema on the target database.
   const appPool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
-  await appPool.query(schema);
-  console.log("✓ Schema applied");
-  await appPool.end();
+  try {
+    const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
+    await appPool.query(schema);
+    console.log("✓ Schema applied");
+
+    // 3. Additive migrations (idempotent) —incl. seed admin SSO + DROP password.
+    await runMigrations(appPool);
+  } finally {
+    await appPool.end();
+  }
+  console.log("✓ Setup complete");
 }
 
 main().catch((err) => {

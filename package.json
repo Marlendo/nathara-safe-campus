@@ -1,12 +1,12 @@
 {
-  "name": "safepath-poc",
-  "version": "0.1.0",
+  "name": "nathara-safe-campus",
+  "version": "0.2.0",
   "private": true,
-  "description": "SafePath POC — safety reporting & protection platform (React + Node + PostgreSQL)",
+  "description": "Nathara Safe Campus — safety reporting & protection platform (React + Node + PostgreSQL, SSO via Supabase prod)",
   "scripts": {
-    "install:all": "npm --prefix backend install && npm --prefix frontend install",
-    "db:reset": "npm --prefix backend run db:reset",
-    "api": "npm --prefix backend run dev",
-    "web": "npm --prefix frontend run dev"
+    "install:all": "bun install --cwd backend && bun install --cwd frontend",
+    "db:reset": "bun run --cwd backend db:reset",
+    "api": "bun run --cwd backend dev",
+    "web": "bun run --cwd frontend dev"
   }
 }

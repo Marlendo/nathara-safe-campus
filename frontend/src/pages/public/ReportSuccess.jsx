@@ -18,7 +18,7 @@ export default function ReportSuccess() {
         <div className="mx-auto mt-6 max-w-sm rounded-xl bg-canvas p-5">
           <p className="text-sm text-ink/60">Your case ID</p>
           <p className="mt-1 text-3xl font-bold tracking-wider text-navy">
-            {report.caseNumber || "SP-…"}
+            {report.caseNumber || "NSC-…"}
           </p>
           <div className="mt-3 flex items-center justify-center gap-2">
             <span className="text-sm text-ink/60">Priority</span>

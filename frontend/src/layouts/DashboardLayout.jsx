@@ -16,15 +16,14 @@ const adminNavItems = [
  * Responder dashboard shell with a compact sidebar.
  */
 export default function DashboardLayout() {
-  const { user, logout } = useAuth();
-  const isAdmin = user?.role === "ADMIN";
+  const { user, logout, isAdmin } = useAuth();
 
   return (
     <div className="min-h-screen bg-canvas">
       <aside className="fixed inset-y-0 left-0 hidden w-56 border-r border-navy/10 bg-navy text-white md:block">
         <div className="flex h-full flex-col p-4">
           <Link to="/dashboard" className="mb-6 text-lg font-bold">
-            SAFE<span className="text-safety">Path</span>
+            Nathara Safe Campus
             <span className="mt-1 block text-xs font-normal text-white/50">
               Protection Dashboard
             </span>
@@ -93,7 +92,7 @@ export default function DashboardLayout() {
       {/* Mobile top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-navy/10 bg-navy px-4 py-3 text-white md:hidden">
         <Link to="/dashboard" className="font-bold">
-          SAFE<span className="text-safety">Path</span>
+          Nathara Safe Campus
         </Link>
         <div className="flex items-center gap-3 text-xs">
           <Link to="/dashboard/cases">Cases</Link>

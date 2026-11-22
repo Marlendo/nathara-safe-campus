@@ -155,10 +155,10 @@ router.get("/:caseNumber/status", async (req, res, next) => {
   }
 });
 
-/** Generates a sequential SP-XXXX case number. */
+/** Generates a sequential NSC-XXXX case number. */
 async function nextCaseNumber() {
   const { rows } = await query("SELECT nextval('case_seq') AS n");
-  return `SP-${rows[0].n}`;
+  return `NSC-${rows[0].n}`;
 }
 
 module.exports = router;

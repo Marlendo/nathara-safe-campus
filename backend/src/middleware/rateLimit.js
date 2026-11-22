@@ -13,13 +13,13 @@ const publicLimiter = rateLimit({
   message: { error: "Too many requests — please try again later" },
 });
 
-/** Stricter limiter for the login endpoint. */
-const loginLimiter = rateLimit({
+/** Limiter untuk endpoint sesi SSO (GET /me, backchannel-logout). */
+const ssoLimiter = rateLimit({
   windowMs: Number(process.env.RATE_WINDOW_MS) || 10 * 60 * 1000,
   max: Number(process.env.RATE_MAX) || 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many login attempts — please wait and try again" },
+  message: { error: "Too many requests — please wait and try again" },
 });
 
-module.exports = { publicLimiter, loginLimiter };
+module.exports = { publicLimiter, ssoLimiter, loginLimiter: ssoLimiter };

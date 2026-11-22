@@ -4,7 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 
-const { publicLimiter, loginLimiter } = require("./src/middleware/rateLimit");
+const { publicLimiter, ssoLimiter } = require("./src/middleware/rateLimit");
 
 const authRoutes = require("./src/routes/auth.routes");
 const reportRoutes = require("./src/routes/report.routes");
@@ -13,12 +13,20 @@ const adminRoutes = require("./src/routes/admin.routes");
 
 /* ------------------------------------------------------------------ */
 /*  Fail fast on missing critical config                               */
+/*  Auth = SSO Supabase prod (RS256 via JWKS). Tidak ada secret      */
+/*  lokal lagi — satu-satunya rahasia adalah DATABASE_URL server-side. */
 /* ------------------------------------------------------------------ */
 const isProd = process.env.NODE_ENV === "production";
 const missing = [];
 if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "change-me-safepath-dev-secret") {
-  if (isProd) missing.push("JWT_SECRET (set a strong production secret)");
+if (!process.env.SSO_JWKS_URL) {
+  if (isProd) {
+    missing.push("SSO_JWKS_URL (e.g. https://api.nathara.ac.id/functions/v1/sso-jwks)");
+  } else {
+    process.env.SSO_JWKS_URL =
+      "https://api.nathara.ac.id/functions/v1/sso-jwks";
+    console.warn("SSO_JWKS_URL not set — using prod default for development");
+  }
 }
 if (missing.length > 0) {
   console.error(`Missing required environment variable(s): ${missing.join(", ")}`);
@@ -37,10 +45,12 @@ if (process.env.TRUST_PROXY === "true") {
   app.set("trust proxy", 1);
 }
 
-// Public endpoints are rate-limited.
+// Public endpoints are rate-limited. SSO session endpoints keep a
+// stricter limiter (relocated from the removed local login endpoint).
 app.use("/api/v1/reports", publicLimiter);
 app.use("/api/v1/services", publicLimiter);
-app.use("/api/v1/auth/login", loginLimiter);
+app.use("/api/v1/auth/me", ssoLimiter);
+app.use("/api/v1/auth/backchannel-logout", ssoLimiter);
 
 app.use(express.json({ limit: "512kb" }));
 
@@ -51,7 +61,7 @@ app.use((req, _res, next) => {
 });
 
 app.get("/api/v1/health", (_req, res) => {
-  res.json({ status: "ok", service: "safepath-api", env: process.env.NODE_ENV || "development" });
+  res.json({ status: "ok", service: "nathara-safe-campus-api", env: process.env.NODE_ENV || "development" });
 });
 
 // A neutral, public page target for client-side "quick exit" — returns plain HTML.
@@ -82,5 +92,5 @@ app.use((err, _req, res, _next) => {
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
-  console.log(`SafePath API listening on http://localhost:${PORT} (${isProd ? "production" : "development"})`);
+  console.log(`Nathara Safe Campus API listening on http://localhost:${PORT} (${isProd ? "production" : "development"})`);
 });

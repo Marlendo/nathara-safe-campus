@@ -7,7 +7,7 @@ import { useAuth } from "../../features/auth/AuthContext";
 import api from "../../services/api";
 import { formatDate } from "../../utils/validation";
 
-const EMPTY = { name: "", email: "", password: "", role: "RESPONDER" };
+const EMPTY = { name: "", email: "", role: "responder", scope: "NONE" };
 
 export default function Users() {
   const { token, user: me } = useAuth();
@@ -54,27 +54,12 @@ export default function Users() {
     }
   };
 
-  const resetPassword = async (u) => {
-    const pw = window.prompt(`New password for ${u.name} (min 8 characters):`);
-    if (!pw) return;
-    if (pw.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    setError("");
-    try {
-      await api.resetPassword(token, u.id, pw);
-      window.alert("Password updated.");
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
   return (
     <div>
-      <h1 className="text-2xl font-bold text-navy">Responder accounts</h1>
+      <h1 className="text-2xl font-bold text-navy">User accounts</h1>
       <p className="mt-1 text-sm text-ink/60">
-        Create and manage responder and admin accounts.
+        Manage responder and admin accounts. Sign-in is via SSO — accounts
+        here only control the local role and scope mapping.
       </p>
 
       {error && (
@@ -101,16 +86,7 @@ export default function Users() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="omar@safepath.demo"
-                required
-              />
-            </Field>
-            <Field label="Temporary password">
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="min 8 characters"
+                placeholder="nama@ppkpt.nathara.ac.id"
                 required
               />
             </Field>
@@ -120,8 +96,18 @@ export default function Users() {
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
                 className="w-full rounded-lg border border-navy/15 bg-white px-3 py-2 text-sm"
               >
-                <option value="RESPONDER">Responder</option>
-                <option value="ADMIN">Admin</option>
+                <option value="responder">Responder</option>
+                <option value="admin">Admin</option>
+              </select>
+            </Field>
+            <Field label="Scope">
+              <select
+                value={form.scope}
+                onChange={(e) => setForm({ ...form, scope: e.target.value })}
+                className="w-full rounded-lg border border-navy/15 bg-white px-3 py-2 text-sm"
+              >
+                <option value="NONE">NONE</option>
+                <option value="SAFE_CAMPUS">SAFE_CAMPUS</option>
               </select>
             </Field>
             <Button type="submit" variant="primary" className="w-full" disabled={saving}>
@@ -155,25 +141,23 @@ export default function Users() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge tone={u.role === "ADMIN" ? "navy" : "protect"}>
-                      {u.role === "ADMIN" ? "Admin" : "Responder"}
+                    <Badge tone={u.role === "admin" ? "navy" : "protect"}>
+                      {u.role === "admin" ? "Admin" : "Responder"}
+                    </Badge>
+                    <Badge tone={u.scope === "SAFE_CAMPUS" ? "navy" : "protect"}>
+                      {u.scope}
                     </Badge>
                     <Badge tone={u.status === "ACTIVE" ? "protect" : "danger"}>
                       {u.status === "ACTIVE" ? "Active" : "Disabled"}
                     </Badge>
                     {u.id !== me?.id && (
-                      <>
-                        <Button
-                          variant={u.status === "ACTIVE" ? "danger" : "protect"}
-                          size="sm"
-                          onClick={() => toggleStatus(u)}
-                        >
-                          {u.status === "ACTIVE" ? "Disable" : "Enable"}
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => resetPassword(u)}>
-                          Reset password
-                        </Button>
-                      </>
+                      <Button
+                        variant={u.status === "ACTIVE" ? "danger" : "protect"}
+                        size="sm"
+                        onClick={() => toggleStatus(u)}
+                      >
+                        {u.status === "ACTIVE" ? "Disable" : "Enable"}
+                      </Button>
                     )}
                   </div>
                 </div>

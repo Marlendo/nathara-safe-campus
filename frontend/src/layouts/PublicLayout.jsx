@@ -18,7 +18,7 @@ export default function PublicLayout() {
       <header className="border-b border-navy/10 bg-navy text-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
           <Link to="/" className="text-xl font-bold tracking-tight">
-            SAFE<span className="text-safety">Path</span>
+            Nathara Safe Campus
           </Link>
           <nav className="flex items-center gap-4 text-sm">
             <Link to="/report" className="hover:text-safety">
@@ -44,7 +44,7 @@ export default function PublicLayout() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         {pathname !== "/about" && (
           <p className="mb-6 rounded-lg bg-amber-50 px-4 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
-            DEMO SYSTEM — Do not submit real emergency or personal information.
+            Staging environment — do not submit real emergency or personal information.
           </p>
         )}
         <Outlet />

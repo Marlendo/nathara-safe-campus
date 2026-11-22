@@ -1,12 +1,16 @@
 require("dotenv").config();
-const bcrypt = require("bcryptjs");
 const { pool } = require("../src/db");
 
 /**
- * Seeds demo data: responder + admin users, support services,
- * a handful of fictional cases, assignments, notes, referrals, events.
+ * Seeds demo data untuk Nathara Safe Campus.
  *
- * Run: npm run db:seed   (after db:setup)
+ * - TANPA password / kredensial demo (login hanya via SSO Supabase prod).
+ * - Admin awal dari env SEED_ADMIN_SUB + SEED_ADMIN_EMAIL (+ SEED_ADMIN_NAME
+ *   opsional); placeholder di repo, nilai via file VPS. Bila env kosong,
+ *   admin dilewati (peringatan) — email final menyusul dari human.
+ * - Prefix kasus NSC-, email layanan netral @ppkpt.nathara.ac.id.
+ *
+ * Run: bun db/seed.js   (setelah bun db/setup.js)
  */
 
 const SERVICES = [
@@ -19,11 +23,11 @@ const SERVICES = [
     availability: "24/7",
   },
   {
-    name: "SafePath Protection Center",
+    name: "Nathara Safe Campus Protection Center",
     service_type: "protection",
     description: "Case management and safety planning for people at risk.",
     phone: "0800-555-0143",
-    email: "protection@safepath.demo",
+    email: "protection@ppkpt.nathara.ac.id",
     availability: "24/7",
   },
   {
@@ -39,7 +43,7 @@ const SERVICES = [
     service_type: "psychosocial",
     description: "Confidential counseling and emotional support.",
     phone: "0800-555-0190",
-    email: "pss@safepath.demo",
+    email: "pss@ppkpt.nathara.ac.id",
     availability: "08:00–22:00",
   },
   {
@@ -47,7 +51,7 @@ const SERVICES = [
     service_type: "legal",
     description: "Rights information and legal advice.",
     phone: "0800-555-0121",
-    email: "legal@safepath.demo",
+    email: "legal@ppkpt.nathara.ac.id",
     availability: "Mon–Fri 09:00–17:00",
   },
   {
@@ -62,66 +66,66 @@ const SERVICES = [
 
 const DEMO_CASES = [
   {
-    case_number: "SP-1001",
+    case_number: "NSC-1001",
     report_type: "threat",
     urgency: "immediate",
     status: "NEW",
     description:
       "I received repeated threats demanding I hand over money. The sender knows where I live and said they would come to my home tonight.",
     incident_date: "2026-09-19",
-    location: "Port Sudan",
+    location: "North District",
     current_safety: "no",
     perpetrator_nearby: true,
     reporter_type: "anonymous",
   },
   {
-    case_number: "SP-1002",
+    case_number: "NSC-1002",
     report_type: "violence",
     urgency: "urgent",
     status: "UNDER_REVIEW",
     description:
       "A relative assaulted me last week. I am afraid it will happen again but I did not want to involve the police directly.",
     incident_date: "2026-09-15",
-    location: "Khartoum",
+    location: "Central District",
     current_safety: "unsure",
     perpetrator_nearby: false,
     reporter_type: "contact",
   },
   {
-    case_number: "SP-1003",
+    case_number: "NSC-1003",
     report_type: "abuse",
     urgency: "urgent",
     status: "ASSIGNED",
     description:
       "Ongoing abuse at home. I have been managing alone and need to understand what options are available for temporary housing.",
     incident_date: "2026-09-12",
-    location: "Omdurman",
+    location: "West District",
     current_safety: "yes",
     perpetrator_nearby: true,
     reporter_type: "anonymous",
   },
   {
-    case_number: "SP-1004",
+    case_number: "NSC-1004",
     report_type: "harassment",
     urgency: "concerning",
     status: "CLOSED",
     description:
       "Repeated harassment online and some encounters near my workplace. I was given advice and contacts by the responder.",
     incident_date: "2026-09-08",
-    location: "Kassala",
+    location: "East District",
     current_safety: "yes",
     perpetrator_nearby: false,
     reporter_type: "anonymous",
   },
   {
-    case_number: "SP-1005",
+    case_number: "NSC-1005",
     report_type: "missing_vulnerable",
     urgency: "urgent",
     status: "REFERRED",
     description:
       "A vulnerable family member has not returned home. I am reporting it here and have been referred to the protection center.",
     incident_date: "2026-09-20",
-    location: "Wad Madani",
+    location: "South District",
     current_safety: "unsure",
     perpetrator_nearby: false,
     reporter_type: "contact",
@@ -129,8 +133,8 @@ const DEMO_CASES = [
 ];
 
 const CONTACT_DETAILS = {
-  "SP-1002": { method: "phone", value: "+249 9 0000 0002" },
-  "SP-1005": { method: "sms", value: "+249 9 0000 0005" },
+  "NSC-1002": { method: "phone", value: "+249 9 0000 0002" },
+  "NSC-1005": { method: "sms", value: "+249 9 0000 0005" },
 };
 
 (async () => {
@@ -138,25 +142,26 @@ const CONTACT_DETAILS = {
   try {
     await client.query("BEGIN");
 
-    /* ---------- Users ---------- */
-    const passwordHash = await bcrypt.hash("demo1234", 10);
-
-    const users = [
-      { name: "Sara Hassan", email: "responder@safepath.demo", role: "RESPONDER" },
-      { name: "Admin", email: "admin@safepath.demo", role: "ADMIN" },
-    ];
-
-    const userIds = {};
-    for (const u of users) {
-      const { rows } = await client.query(
-        `INSERT INTO users (name, email, password_hash, role)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [u.name, u.email, passwordHash, u.role]
+    /* ---------- Admin awal via SSO (dari env, tanpa password) ---------- */
+    const adminSub = (process.env.SEED_ADMIN_SUB || "").trim();
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL || "").toLowerCase().trim();
+    const adminName = (process.env.SEED_ADMIN_NAME || "Safe Campus Admin").trim();
+    if (adminSub && adminEmail) {
+      await client.query(
+        `INSERT INTO users (name, email, supabase_sub, role, scope, status)
+         VALUES ($1, $2, $3, 'admin', 'SAFE_CAMPUS', 'ACTIVE')
+         ON CONFLICT (supabase_sub) DO UPDATE SET
+           email = EXCLUDED.email, name = EXCLUDED.name,
+           role = 'admin', scope = 'SAFE_CAMPUS', status = 'ACTIVE'`,
+        [adminName, adminEmail, adminSub]
       );
-      userIds[u.email] = rows[0].id;
+      console.log(`✓ Admin SSO seeded (${adminEmail})`);
+    } else {
+      console.warn(
+        "! SEED_ADMIN_SUB/SEED_ADMIN_EMAIL kosong — admin awal dilewati. " +
+          "Isi dari file VPS sebelum login admin pertama (email final menyusul)."
+      );
     }
-    console.log("✓ Users seeded (responder@safepath.demo / demo1234)");
 
     /* ---------- Services ---------- */
     const serviceIds = {};
@@ -197,8 +202,8 @@ const CONTACT_DETAILS = {
     console.log(`✓ ${DEMO_CASES.length} demo cases seeded`);
 
     // Advance the case-number sequence past the demo cases so real
-    // submissions (SP-1006, SP-1007, …) don't collide with seeded data.
-    // Seq starts at 1001 and mirrors report id (id 1 → SP-1001).
+    // submissions (NSC-1006, NSC-1007, …) don't collide with seeded data.
+    // Seq starts at 1001 and mirrors report id (id 1 → NSC-1001).
     await client.query(`
       SELECT setval('case_seq', (SELECT COALESCE(max(id), 0) FROM reports) + 1000)
     `);
@@ -212,54 +217,27 @@ const CONTACT_DETAILS = {
       );
     }
 
-    /* ---------- Assignment: SP-1003 assigned to Sara ---------- */
-    await client.query(
-      `INSERT INTO case_assignments (report_id, user_id) VALUES ($1, $2)`,
-      [reportIds["SP-1003"], userIds["responder@safepath.demo"]]
-    );
-    await client.query(
-      `INSERT INTO case_events (report_id, user_id, event_type, description)
-       VALUES ($1, $2, 'CASE_ASSIGNED', 'Case assigned to Sara Hassan')`,
-      [reportIds["SP-1003"], userIds["responder@safepath.demo"]]
-    );
-
-    /* ---------- A note on SP-1002 ---------- */
-    await client.query(
-      `INSERT INTO case_notes (report_id, user_id, note)
-       VALUES ($1, $2, $3)`,
-      [
-        reportIds["SP-1002"],
-        userIds["responder@safepath.demo"],
-        "Contacted reporter. Offered referrral to safety planning session.",
-      ]
-    );
-    await client.query(
-      `INSERT INTO case_events (report_id, user_id, event_type, description)
-       VALUES ($1, $2, 'NOTE_ADDED', 'Internal note added')`,
-      [reportIds["SP-1002"], userIds["responder@safepath.demo"]]
-    );
-
-    /* ---------- Referral on SP-1005 to Protection Center ---------- */
+    /* ---------- Referral on NSC-1005 to Protection Center ---------- */
     await client.query(
       `INSERT INTO referrals (report_id, service_id, status, notes)
        VALUES ($1, $2, 'REFERRED', $3)`,
       [
-        reportIds["SP-1005"],
-        serviceIds["SafePath Protection Center"],
+        reportIds["NSC-1005"],
+        serviceIds["Nathara Safe Campus Protection Center"],
         "Referred for case management.",
       ]
     );
     await client.query(
-      `INSERT INTO case_events (report_id, user_id, event_type, description)
-       VALUES ($1, $2, 'REFERRAL_CREATED', 'Referral created: SafePath Protection Center')`,
-      [reportIds["SP-1005"], userIds["responder@safepath.demo"]]
+      `INSERT INTO case_events (report_id, event_type, description)
+       VALUES ($1, 'REFERRAL_CREATED', 'Referral created: Nathara Safe Campus Protection Center')`,
+      [reportIds["NSC-1005"]]
     );
 
-    /* ---------- Close event on SP-1004 ---------- */
+    /* ---------- Close event on NSC-1004 ---------- */
     await client.query(
       `INSERT INTO case_events (report_id, event_type, description)
        VALUES ($1, 'CASE_CLOSED', 'Case closed')`,
-      [reportIds["SP-1004"]]
+      [reportIds["NSC-1004"]]
     );
 
     await client.query("COMMIT");
