@@ -20,7 +20,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safe_campus}
       POSTGRES_DB: safe_campus
     volumes:
-      - safe-campus-postgres-data:/var/lib/postgresql/data
+      - safe-campus-postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U safe_campus -d safe_campus"]
       interval: 5s
@@ -64,11 +64,19 @@ services:
 
   web:
     build: ./frontend
+    container_name: safe-campus-web
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
       - api
     restart: unless-stopped
+    networks:
+      - default
+      - siakad-network
 
 volumes:
   safe-campus-postgres-data:
+
+networks:
+  siakad-network:
+    external: true
