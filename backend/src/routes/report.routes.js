@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { query } = require("../db");
+const { verifySsoToken } = require("../middleware/ssoAuth");
 const {
   REPORT_TYPES,
   URGENCY,
@@ -86,6 +87,19 @@ router.post("/", async (req, res, next) => {
 
     const report = rows[0];
 
+    // Kepemilikan untuk GET /admin/reports/mine (F1 Opsi A, best-effort):
+    // bila peminta membawa JWT SSO valid milik akun yang SUDAH ada,
+    // tautkan laporan ke user tsb. Tanpa token / token tak valid /
+    // akun belum ada → NULL (anonim, perilaku publik tidak berubah).
+    // TIDAK auto-provision dari jalur publik; TIDAK pernah 401 di sini.
+    const ownerId = await resolveOwnerId(req);
+    if (ownerId) {
+      await query(
+        "UPDATE reports SET submitted_by_user_id = $1 WHERE id = $2",
+        [ownerId, report.id]
+      );
+    }
+
     // --- Optional reporter contact (kept in a separate table) ---
     if (reporterType === "contact") {
       await query(
@@ -159,6 +173,29 @@ router.get("/:caseNumber/status", async (req, res, next) => {
 async function nextCaseNumber() {
   const { rows } = await query("SELECT nextval('case_seq') AS n");
   return `NSC-${rows[0].n}`;
+}
+
+/**
+ * Best-effort owner lookup untuk atribusi /reports/mine.
+ * Mengembalikan user id bila Authorization Bearer = JWT SSO valid
+ * milik akun yang sudah ada; selain itu null (anonim).
+ * Tidak pernah melempar — kegagalan verifikasi/DB = anonim.
+ */
+async function resolveOwnerId(req) {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) return null;
+    const payload = await verifySsoToken(token);
+    if (!payload || !payload.sub) return null;
+    const { rows } = await query(
+      "SELECT id FROM users WHERE supabase_sub = $1",
+      [String(payload.sub)]
+    );
+    return rows.length > 0 ? rows[0].id : null;
+  } catch {
+    return null;
+  }
 }
 
 module.exports = router;

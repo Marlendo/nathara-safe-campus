@@ -38,7 +38,20 @@ const app = express();
 // Privacy first: never log request bodies (they may contain report data).
 app.disable("x-powered-by");
 app.use(helmet());
-app.use(cors());
+// F2: CORS bertingkat — /api/v1/admin HANYA dari allowlist origin
+// (default https://ppkpt.nathara.ac.id, via ADMIN_CORS_ORIGIN).
+// Endpoint publik (/reports, /services, /health, /about) boleh longgar
+// (KEEP) karena tanpa ambient-auth cookie — Bearer di sessionStorage
+// tidak bisa dibajak cross-origin.
+const ADMIN_CORS_ORIGIN = (process.env.ADMIN_CORS_ORIGIN || "https://ppkpt.nathara.ac.id")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const publicCors = cors();
+app.use("/api/v1/admin", cors({ origin: ADMIN_CORS_ORIGIN }));
+app.use("/api/v1/reports", publicCors);
+app.use("/api/v1/services", publicCors);
+app.use("/api/v1/auth", publicCors);
 
 // Trust proxy only when explicitly enabled (behind nginx/ELB in production).
 if (process.env.TRUST_PROXY === "true") {
@@ -60,12 +73,12 @@ app.use((req, _res, next) => {
   next();
 });
 
-app.get("/api/v1/health", (_req, res) => {
+app.get("/api/v1/health", publicCors, (_req, res) => {
   res.json({ status: "ok", service: "nathara-safe-campus-api", env: process.env.NODE_ENV || "development" });
 });
 
 // A neutral, public page target for client-side "quick exit" — returns plain HTML.
-app.get("/about", (_req, res) => {
+app.get("/about", publicCors, (_req, res) => {
   res
     .type("html")
     .send(

@@ -56,7 +56,8 @@ services:
       SSO_AUDIENCE: ${SSO_AUDIENCE:-ppkpt}
       TRUST_PROXY: "true"
       RATE_WINDOW_MS: 600000
-      RATE_MAX: 60
+      RATE_MAX: 20
+      ADMIN_CORS_ORIGIN: ${ADMIN_CORS_ORIGIN:-https://ppkpt.nathara.ac.id}
     depends_on:
       init:
         condition: service_completed_successfully

@@ -28,7 +28,12 @@ const SSO_AUDIENCE = process.env.SSO_AUDIENCE || "ppkpt";
 // Cache HANYA kunci JWKS (bukan decision user). TTL 10 menit.
 const JWKS_TTL_MS = 10 * 60 * 1000;
 const CLOCK_SKEW_SEC = 60;
-let jwksCache = { keys: new Map(), fetchedAt: 0 };
+// F4: jeda minimum antar percobaan fetch JWKS (backoff ≥60 dtk).
+// Selama backoff, cache lama tetap dipakai (serve-stale) supaya
+// IdP down sesaat tidak menjatuhkan semua auth + tidak menghantam
+// IdP tiap request (retry storm).
+const JWKS_RETRY_MIN_MS = 60 * 1000;
+let jwksCache = { keys: new Map(), fetchedAt: 0, fetchFailedAt: 0 };
 
 async function fetchJwks() {
   const controller = new AbortController();
@@ -46,21 +51,42 @@ async function fetchJwks() {
     for (const k of data.keys) {
       if (k.kid) map.set(k.kid, k);
     }
-    jwksCache = { keys: map, fetchedAt: Date.now() };
+    // Sukses: segarkan cache + reset penanda gagal.
+    jwksCache = { keys: map, fetchedAt: Date.now(), fetchFailedAt: 0 };
+  } catch (err) {
+    // Gagal: catat waktu gagal (untuk backoff), cache lama dipertahankan.
+    jwksCache.fetchFailedAt = Date.now();
+    throw err;
   } finally {
     clearTimeout(timer);
   }
 }
 
 async function getJwk(kid, forceRefresh = false) {
-  const stale = Date.now() - jwksCache.fetchedAt > JWKS_TTL_MS;
-  if (forceRefresh || stale || jwksCache.keys.size === 0) {
-    await fetchJwks();
+  const now = Date.now();
+  const stale = now - jwksCache.fetchedAt > JWKS_TTL_MS;
+  // Selama masa backoff pasca-gagal: JANGAN hantam IdP lagi.
+  const coolingDown =
+    jwksCache.fetchFailedAt > 0 &&
+    now - jwksCache.fetchFailedAt < JWKS_RETRY_MIN_MS;
+  const needFetch =
+    (forceRefresh || stale || jwksCache.keys.size === 0) && !coolingDown;
+  if (needFetch) {
+    try {
+      await fetchJwks();
+    } catch (err) {
+      if (jwksCache.keys.size === 0) throw err; // tak ada cache lama → 401
+      // Ada cache lama → serve-stale (lanjut dengan kunci lama).
+    }
   }
   let jwk = jwksCache.keys.get(kid);
-  if (!jwk && !forceRefresh) {
+  if (!jwk && !forceRefresh && !coolingDown) {
     // Kemungkinan rotasi kid — refresh sekali lalu coba lagi.
-    await fetchJwks();
+    try {
+      await fetchJwks();
+    } catch {
+      // Gagal refresh: tetap serve-stale bila ada, else null → 401.
+    }
     jwk = jwksCache.keys.get(kid);
   }
   return jwk || null;
@@ -196,6 +222,15 @@ async function requireAuth(req, res, next) {
     req.sso = { sub, scopes: scopesOf(payload) };
     next();
   } catch (err) {
+    // F5: email sudah dipakai akun (sub) lain → konflik kepemilikan.
+    // Balas 409 yang jelas + audit 'conflict' (bukan 500 generik yang
+    // mengunci user sah). Tanpa bocoran PII.
+    if (err && err.code === "23505") {
+      await auditLogin({ sub, email, hasil: "conflict", ip: req.ip });
+      return res
+        .status(409)
+        .json({ error: "Account exists — hubungi admin" });
+    }
     next(err);
   }
 }
@@ -219,5 +254,35 @@ module.exports = {
   verifySsoToken,
   auditLogin,
   // Diekspor untuk test: jangan dipakai untuk cache decision di manapun.
-  _ssoConfig: { SSO_JWKS_URL, SSO_ISSUER, SSO_AUDIENCE },
+  _ssoConfig: {
+    SSO_JWKS_URL,
+    SSO_ISSUER,
+    SSO_AUDIENCE,
+    JWKS_TTL_MS,
+    JWKS_RETRY_MIN_MS,
+  },
+  // Hook test F4: manipulasi/introspeksi cache JWKS.
+  // BUKAN untuk decision user — hanya kunci JWKS.
+  _jwksTest: {
+    get: (kid, forceRefresh) => getJwk(kid, forceRefresh),
+    reset: () => {
+      jwksCache = { keys: new Map(), fetchedAt: 0, fetchFailedAt: 0 };
+    },
+    seed: (keys, fetchedAt) => {
+      const map = new Map();
+      for (const k of keys || []) {
+        if (k && k.kid) map.set(k.kid, k);
+      }
+      jwksCache = {
+        keys: map,
+        fetchedAt: typeof fetchedAt === "number" ? fetchedAt : Date.now(),
+        fetchFailedAt: 0,
+      };
+    },
+    state: () => ({
+      size: jwksCache.keys.size,
+      fetchedAt: jwksCache.fetchedAt,
+      fetchFailedAt: jwksCache.fetchFailedAt,
+    }),
+  },
 };

@@ -4,19 +4,23 @@ const rateLimit = require("express-rate-limit");
  * Rate limiting for PUBLIC endpoints (report submission, case-status and
  * service lookups). DNS lookups are disabled so failures don't crash the
  * process on some hosts.
+ *
+ * Keputusan human 2026-11-22 (F1 follow-up): RATE_MAX = 20 / 10 mnt
+ * (spec SA). Env spesifik (RATE_MAX_PUBLIC / RATE_MAX_SSO) didahulukan,
+ * lalu RATE_MAX generik, lalu default.
  */
 const publicLimiter = rateLimit({
   windowMs: Number(process.env.RATE_WINDOW_MS) || 10 * 60 * 1000, // 10 minutes
-  max: Number(process.env.RATE_MAX) || 60,
+  max: Number(process.env.RATE_MAX_PUBLIC || process.env.RATE_MAX) || 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests — please try again later" },
 });
 
-/** Limiter untuk endpoint sesi SSO (GET /me, backchannel-logout). */
+/** Limiter untuk endpoint sesi SSO (GET /me, backchannel-logout): 20 / 10 mnt (spec SA). */
 const ssoLimiter = rateLimit({
   windowMs: Number(process.env.RATE_WINDOW_MS) || 10 * 60 * 1000,
-  max: Number(process.env.RATE_MAX) || 20,
+  max: Number(process.env.RATE_MAX_SSO || process.env.RATE_MAX) || 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests — please wait and try again" },

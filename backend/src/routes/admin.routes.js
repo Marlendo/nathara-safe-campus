@@ -36,8 +36,9 @@ async function resolveReport(caseNumber) {
   return rows[0] || null;
 }
 
-// GET /admin/overview — dashboard stats
-router.get("/overview", async (req, res, next) => {
+// GET /admin/overview — dashboard stats (admin + SAFE_CAMPUS only;
+// agregat + 10 kasus terbaru memuat data seluruh pelapor)
+router.get("/overview", requireAdminSc, async (req, res, next) => {
   try {
     const { rows } = await query(`
       SELECT
@@ -73,8 +74,8 @@ router.get("/overview", async (req, res, next) => {
   }
 });
 
-// GET /admin/reports — case list (filters: status, urgency, reportType)
-router.get("/reports", async (req, res, next) => {
+// GET /admin/reports — case list (admin + SAFE_CAMPUS only)
+router.get("/reports", requireAdminSc, async (req, res, next) => {
   try {
     const { status, urgency, reportType } = req.query;
 
@@ -118,8 +119,29 @@ router.get("/reports", async (req, res, next) => {
   }
 });
 
-// GET /admin/reports/:caseNumber — full case detail
-router.get("/reports/:caseNumber", async (req, res, next) => {
+// GET /admin/reports/mine — laporan milik pelapor yang sedang login.
+// (F1 Opsi A: satu-satunya endpoint baca-kasus untuk non-admin.
+//  Filter kepemilikan WHERE submitted_by_user_id = req.user.id.
+//  TANPA reporter_contacts — minimasi PII. Didefinisikan SEBELUM
+//  /reports/:caseNumber agar "mine" tidak ditangkap param caseNumber.)
+router.get("/reports/mine", async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT r.case_number, r.report_type, r.urgency, r.status, r.created_at
+         FROM reports r
+        WHERE r.submitted_by_user_id = $1
+        ORDER BY r.created_at DESC`,
+      [req.user.id]
+    );
+    res.json({ reports: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /admin/reports/:caseNumber — full case detail (admin + SAFE_CAMPUS
+// only; memuat reporter_contacts = PII pelapor)
+router.get("/reports/:caseNumber", requireAdminSc, async (req, res, next) => {
   try {
     const { caseNumber } = req.params;
 
@@ -363,8 +385,8 @@ router.post("/reports/:caseNumber/referrals", async (req, res, next) => {
 /* ------------------------------------------------------------------ */
 
 // GET /admin/responders — active responders for assignment dropdowns
-// (available to any authenticated user)
-router.get("/responders", async (_req, res, next) => {
+// (admin + SAFE_CAMPUS only; direktori internal, bukan untuk pelapor)
+router.get("/responders", requireAdminSc, async (_req, res, next) => {
   try {
     const { rows } = await query(`
       SELECT id, name FROM users

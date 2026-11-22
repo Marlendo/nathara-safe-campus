@@ -107,3 +107,17 @@ test("backchannel-logout without logout_token is rejected (400)", async () => {
   });
   expect(status).toBe(400);
 });
+
+test("admin reports/mine without token is rejected (401)", async () => {
+  const { status } = await req("/admin/reports/mine");
+  expect(status).toBe(401);
+});
+
+test("backchannel-logout with garbage token is acknowledged (200, no audit spam)", async () => {
+  const { status, json } = await req("/auth/backchannel-logout", {
+    method: "POST",
+    body: { logout_token: "sampah.bukan.token" },
+  });
+  expect(status).toBe(200);
+  expect(json.ok).toBe(true);
+});
