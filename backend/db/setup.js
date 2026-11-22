@@ -46,12 +46,23 @@ async function main() {
     await adminPool.end();
   }
 
-  // 2. Apply the schema on the target database.
+  // 2. Apply the schema on the target database — but NEVER re-apply
+  // on an already-provisioned DB (schema.sql has plain CREATE TABLE,
+  // so re-apply fails with "relation already exists" and blocks
+  // redeploys). If core table `users` exists, the DB is provisioned:
+  // skip schema, run additive migrations only (data untouched).
   const appPool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
-    await appPool.query(schema);
-    console.log("✓ Schema applied");
+    const { rows } = await appPool.query(
+      "SELECT to_regclass('public.users') AS reg"
+    );
+    if (rows[0] && rows[0].reg) {
+      console.log("✓ Schema already provisioned — skipping schema.sql");
+    } else {
+      const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
+      await appPool.query(schema);
+      console.log("✓ Schema applied");
+    }
 
     // 3. Additive migrations (idempotent) —incl. seed admin SSO + DROP password.
     await runMigrations(appPool);
