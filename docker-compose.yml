@@ -15,6 +15,7 @@
 services:
   db:
     image: postgres:18-alpine
+    container_name: safe-campus-postgres
     environment:
       POSTGRES_USER: safe_campus
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safe_campus}
