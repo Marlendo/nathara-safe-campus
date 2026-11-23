@@ -187,12 +187,15 @@ bun test           # API smoke tests: health, services, report+status lookup,
 
 ## Production deployment (Docker)
 
-A `docker-compose.yml` runs the full stack: **PostgreSQL 18**, the **API**, and
+A `docker-compose.yml` runs the full stack against the **shared PostgreSQL 18
+cluster** (`staging-postgres-18`, network `staging-shared`): the **API**, and
 **nginx** serving the built frontend (which proxies `/api` and `/about`).
+There is no local `db` service — DB lives in `/home/marlendo/staging/docker`.
 
 ```bash
 # 1. Set your secrets
-cp .env.example .env      # then edit POSTGRES_PASSWORD / SEED_ADMIN_*
+cp .env.example .env      # then edit SAFE_CAMPUS_DB_PASSWORD / SEED_ADMIN_*
+                          # (password from /home/marlendo/staging/docker/.env)
 
 # 2. Build & start
 docker compose up --build -d
@@ -202,7 +205,7 @@ docker compose up --build -d
 
 `.env` (root):
 ```
-POSTGRES_PASSWORD=<db password>
+SAFE_CAMPUS_DB_PASSWORD=<db password, from /home/marlendo/staging/docker/.env>
 WEB_PORT=8080
 ```
 
@@ -212,8 +215,8 @@ Notes:
   when users already exist). Remove the `init` service from `docker compose up` after first boot if desired.
 - `TRUST_PROXY=true` is set for the API so rate limiting keys on real IPs behind the nginx proxy.
 - For real deployments, put nginx behind TLS (Let's Encrypt / managed certificate),
-  rotate `POSTGRES_PASSWORD`, restrict the DB port to the compose
-  network, schedule `pg_dump` backups, and point `DATABASE_URL` at a managed PostgreSQL service.
+  rotate `SAFE_CAMPUS_DB_PASSWORD` (in `/home/marlendo/staging/docker/.env`),
+  schedule `pg_dump` backups of database `safe_campus` on the shared cluster.
 
 ## Notes
 

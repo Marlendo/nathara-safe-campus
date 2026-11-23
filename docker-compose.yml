@@ -4,45 +4,39 @@
 #   bunx --bun compose up --build   (atau: docker compose up --build)
 #
 # Services:
-#   db    — PostgreSQL 18 (persistent volume)
+#   init  — idempotent DB init vs SHARED cluster (setup + seed guard)
 #   api   — Express API (SSO Supabase prod, rate-limited, helmet-hardened)
 #   web   — nginx serving the built React SPA, proxying /api
 #
+# DB = cluster SHARED `staging-postgres-18` (network `staging-shared`,
+# database `safe_campus`, user `safe_campus`) — SSOT:
+# plan/pm_safecampus_0001_sso_rebrand.md log 2026-11-23 (OVERRIDE
+# human "saya yakin"). TIDAK ada service `db` lokal lagi; volume lama
+# `safe-campus-postgres-data` DIARSIPKAN (JANGAN `down -v` — jalan mundur;
+# container lama `safe-campus-postgres` dibiarkan hidup).
+#
+# Kredensial: SAFE_CAMPUS_DB_PASSWORD dari file VPS
+# /home/marlendo/staging/docker/.env (JANGAN commit nilai asli).
+#
 # Auth = SSO Supabase prod (RS256 via JWKS). Tidak ada secret lokal
-# lagi — rahasia server-side hanya POSTGRES_PASSWORD +
+# lagi — rahasia server-side hanya SAFE_CAMPUS_DB_PASSWORD +
 # DATABASE_URL via file VPS. service_role HARAM di sini.
 # ============================================================
 services:
-  db:
-    image: postgres:18-alpine
-    container_name: safe-campus-postgres
-    environment:
-      POSTGRES_USER: safe_campus
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safe_campus}
-      POSTGRES_DB: safe_campus
-    volumes:
-      - safe-campus-postgres-data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U safe_campus -d safe_campus"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
   init:
     build: ./backend
     command: ["sh", "/app/db/init-docker.sh"]
     environment:
-      DATABASE_URL: postgres://safe_campus:${POSTGRES_PASSWORD:-safe_campus}@db:5432/safe_campus
+      DATABASE_URL: postgres://safe_campus:${SAFE_CAMPUS_DB_PASSWORD}@staging-postgres-18:5432/safe_campus
       SSO_JWKS_URL: ${SSO_JWKS_URL:-https://api.nathara.ac.id/functions/v1/sso-jwks}
       SSO_ISSUER: ${SSO_ISSUER:-https://sso.nathara.ac.id}
       SSO_AUDIENCE: ${SSO_AUDIENCE:-ppkpt}
       SEED_ADMIN_SUB: ${SEED_ADMIN_SUB:-}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Safe Campus Admin}
-    depends_on:
-      db:
-        condition: service_healthy
+    networks:
+      - default
+      - staging-shared
     restart: "no"
 
   api:
@@ -51,7 +45,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      DATABASE_URL: postgres://safe_campus:${POSTGRES_PASSWORD:-safe_campus}@db:5432/safe_campus
+      DATABASE_URL: postgres://safe_campus:${SAFE_CAMPUS_DB_PASSWORD}@staging-postgres-18:5432/safe_campus
       SSO_JWKS_URL: ${SSO_JWKS_URL:-https://api.nathara.ac.id/functions/v1/sso-jwks}
       SSO_ISSUER: ${SSO_ISSUER:-https://sso.nathara.ac.id}
       SSO_AUDIENCE: ${SSO_AUDIENCE:-ppkpt}
@@ -62,6 +56,9 @@ services:
     depends_on:
       init:
         condition: service_completed_successfully
+    networks:
+      - default
+      - staging-shared
     restart: unless-stopped
 
   web:
@@ -76,9 +73,8 @@ services:
       - default
       - siakad-network
 
-volumes:
-  safe-campus-postgres-data:
-
 networks:
+  staging-shared:
+    external: true
   siakad-network:
     external: true

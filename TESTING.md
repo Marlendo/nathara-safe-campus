@@ -161,7 +161,8 @@ bun run --cwd frontend build   # must compile without errors
 ## 7. Docker deployment (optional, needs Docker installed)
 
 ```bash
-cp .env.example .env   # then edit POSTGRES_PASSWORD / SEED_ADMIN_*
+cp .env.example .env   # then edit SAFE_CAMPUS_DB_PASSWORD / SEED_ADMIN_*
+                            # (password from /home/marlendo/staging/docker/.env)
 docker compose up --build -d
 # open http://localhost:8080
 ```
